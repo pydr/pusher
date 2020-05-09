@@ -1,0 +1,33 @@
+{
+  "desc":"development",
+  "level":"debug",
+  "stdout":true,
+  "encoding":"console",
+  "addCaller":true,
+  "color":true,
+  "filesout":true,
+  "logspath":[
+    {
+      "level":"error",
+      "hook":{
+          "filename": "/tmp/logs/zlog-error.log",
+	      "maxsize": 1,
+	      "maxage": 7,
+	      "maxbackups": 3,
+	      "localtime": true,
+	      "compress": true
+      }
+    },
+    {
+      "level":"warn",
+      "hook":{
+          "filename": "/tmp/logs/zlog-warn.log",
+	      "maxsize": 1,
+	      "maxage": 7,
+	      "maxbackups": 3,
+	      "localtime": true,
+	      "compress": false
+      }
+    }
+  ]
+}
