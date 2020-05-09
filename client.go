@@ -98,7 +98,7 @@ func (c *Client) readMsg(subHandle, unSubHandle HandleFunc) {
 			data := make(map[string]string)
 			switch receiveMsg.Action {
 			case Pong:
-				c.Heart--
+				c.Heart = 0 // 重置未响应计数
 				continue
 
 			case Sub:
