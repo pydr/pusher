@@ -10,25 +10,70 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func subTestHandle(msg *ReceiveMsg) error {
+	fmt.Printf("[Server] got a sub message: %v\n", msg)
+	return nil
+}
+
+func unsubHandle(msg *ReceiveMsg) error {
+	fmt.Printf("[Server] got a unsub message: %v\n", msg)
+	return nil
+}
+
+func ws(writer http.ResponseWriter, request *http.Request) {
+	ws, err := UpGrader.Upgrade(writer, request, nil)
+	if err != nil {
+		fmt.Print(err.Error())
+		return
+	}
+
+	NewClient(ws).Run(subTestHandle, unsubHandle)
+}
+
+func TestMain(m *testing.M) {
+	http.HandleFunc("/ws", ws)
+	go func() {
+		err := http.ListenAndServe(":9090", nil)
+		if err == nil {
+			fmt.Println("websocket server starting...")
+		}
+	}()
+
+	time.Sleep(2 * time.Second)
+	m.Run()
+}
+
 func TestWebsocket(t *testing.T) {
-	ws, _, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:8000/api/v1/ws", nil)
+	t.Log("connecting...")
+	ws, _, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:9090/ws", nil)
 	if err != nil {
 		t.Fatal("dial failed: ", err)
 	}
+	t.Log("connected")
 	defer ws.Close()
 
-	go func() {
-		data := new(ReceiveMsg)
-		data.Action = Sub
-		data.Topic = "market.btc_usdt.depth"
-		data.Timestamp = time.Now().Unix()
-		jsonData, _ := json.Marshal(data)
+	// 订阅
+	subMsg := &ReceiveMsg{
+		Action:    Sub,
+		Topic:     "market.btc_usdt.depth",
+		Timestamp: time.Now().Unix(),
+	}
+	jsonData, _ := json.Marshal(subMsg)
+	err = ws.WriteMessage(websocket.BinaryMessage, jsonData)
+	if err != nil {
+		t.Fatal("send msg failed: ", err)
+	}
 
-		err = ws.WriteMessage(websocket.BinaryMessage, jsonData)
-		if err != nil {
-			t.Fatal("send msg failed: ", err)
-		}
-	}()
+	unsubMsg := &ReceiveMsg{
+		Action:    Unsub,
+		Topic:     "market.btc_usdt.depth",
+		Timestamp: time.Now().Unix(),
+	}
+	jsonData, _ = json.Marshal(unsubMsg)
+	err = ws.WriteMessage(websocket.BinaryMessage, jsonData)
+	if err != nil {
+		t.Fatal("send msg failed: ", err)
+	}
 
 	go func() {
 		for {
@@ -36,8 +81,7 @@ func TestWebsocket(t *testing.T) {
 			if err != nil {
 				t.Fatal("read msg failed: ", err)
 			}
-
-			fmt.Println("receive msg--->", string(message))
+			fmt.Println("[Client] receive a message: ", string(message))
 
 			var data SendMsg
 			err = json.Unmarshal(message, &data)
@@ -45,11 +89,14 @@ func TestWebsocket(t *testing.T) {
 				t.Fatal("read msg failed: ", err)
 			}
 
+			// 心跳响应
 			if data.Action.Action == Ping {
-				ac := new(Action)
-				ac.Action = Pong
-				ac.Status = true
-				ac.Message = "success"
+				ac := &Action{
+					Action:  Pong,
+					Message: "success",
+					Status:  true,
+				}
+
 				data := new(SendMsg)
 				data.Action = ac
 				data.Timestamp = time.Now().Unix()
@@ -64,29 +111,4 @@ func TestWebsocket(t *testing.T) {
 	}()
 
 	select {}
-}
-
-func subTestHandle(msg *ReceiveMsg) error {
-	fmt.Print(msg)
-	return nil
-}
-
-func unsubHandle(msg *ReceiveMsg) error {
-	fmt.Print(msg)
-	return nil
-}
-
-func ws(writer http.ResponseWriter, request *http.Request) {
-	ws, err := UpGrader.Upgrade(writer, request, nil)
-	if err != nil {
-		fmt.Print(err.Error())
-		return
-	}
-
-	NewClient(ws).Run(subTestHandle, unsubHandle)
-}
-
-func TestNewClient(t *testing.T) {
-	http.HandleFunc("/ws", ws)
-	http.ListenAndServe(":9090", nil)
 }
